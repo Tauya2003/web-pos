@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  CASHIER
+}
+
+enum Currency {
+  USD
+  ZIG
+}
+
+enum RefundMethod {
+  CASH
+  STORE_CREDIT
+  MOBILE_MONEY
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+model Organization {
+  id           String   @id @default(cuid())
+  name         String
+  address      String?
+  phone        String?
+  email        String?
+  vatNumber    String?
+  returnPolicy String?  @default("No returns after 7 days without receipt.")
+  taxRate      Float    @default(15)
+  zigRate      Float    @default(36)
+  smtpHost     String?
+  smtpPort     Int?
+  smtpUser     String?
+  smtpPass     String?
+  smtpFrom     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  users      User[]
+  products   Product[]
+  categories Category[]
+  sales      Sale[]
+  returns    Return[]
+  customers  Customer[]
+}
+
+model User {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  email          String
+  passwordHash   String?
+  pin            String?
+  role           Role         @default(CASHIER)
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  sales   Sale[]
+  returns Return[]
+
+  @@unique([organizationId, email])
+}
+
+model Category {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  createdAt      DateTime     @default(now())
+
+  products Product[]
+
+  @@unique([organizationId, name])
+}
+
+model Product {
+  id                String       @id @default(cuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  categoryId        String?
+  category          Category?    @relation(fields: [categoryId], references: [id])
+  name              String
+  sku               String?
+  barcode           String?
+  priceUsd          Float
+  taxExempt         Boolean      @default(false)
+  stockQuantity     Int          @default(0)
+  lowStockThreshold Int          @default(5)
+  active            Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  saleItems   SaleItem[]
+  returnItems ReturnItem[]
+
+  @@unique([organizationId, sku])
+  @@index([organizationId, name])
+  @@index([organizationId, barcode])
+}
+
+model Customer {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  email          String?
+  phone          String?
+  createdAt      DateTime     @default(now())
+
+  sales   Sale[]
+  returns Return[]
+}
+
+model Sale {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  receiptNumber  String
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+  customerId     String?
+  customer       Customer?    @relation(fields: [customerId], references: [id])
+  currency       Currency     @default(USD)
+  exchangeRate   Float        @default(1)
+  subtotalUsd    Float
+  discountUsd    Float        @default(0)
+  taxUsd         Float
+  totalUsd       Float
+  notes          String?
+  voided         Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+
+  items   SaleItem[]
+  returns Return[]
+
+  @@unique([organizationId, receiptNumber])
+  @@index([organizationId, createdAt])
+}
+
+model SaleItem {
+  id           String        @id @default(cuid())
+  saleId       String
+  sale         Sale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product       @relation(fields: [productId], references: [id])
+  productName  String
+  quantity     Int
+  unitPriceUsd Float
+  discountType DiscountType?
+  discountVal  Float         @default(0)
+  discountUsd  Float         @default(0)
+  taxUsd       Float         @default(0)
+  lineTotalUsd Float
+
+  returnItems ReturnItem[]
+}
+
+model Return {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  saleId         String
+  sale           Sale         @relation(fields: [saleId], references: [id])
+  userId         String
+  user           User         @relation(fields: [userId], references: [id])
+  customerId     String?
+  customer       Customer?    @relation(fields: [customerId], references: [id])
+  reason         String
+  refundMethod   RefundMethod
+  refundUsd      Float
+  currency       Currency     @default(USD)
+  exchangeRate   Float        @default(1)
+  createdAt      DateTime     @default(now())
+
+  items ReturnItem[]
+}
+
+model ReturnItem {
+  id         String   @id @default(cuid())
+  returnId   String
+  return     Return   @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  saleItemId String
+  saleItem   SaleItem @relation(fields: [saleItemId], references: [id])
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id])
+  quantity   Int
+  refundUsd  Float
+}
